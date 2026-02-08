@@ -8,6 +8,66 @@ function simulateClick(element) {
     element.dispatchEvent(event);
 }
 
+// ✅ 處理電腦選號連號
+function handleSeatSelection(setting) {
+    let attempts = 0;
+    const maxAttempts = 40; // 最多等 20 秒
+
+    const checkSeatStep = setInterval(() => {
+        attempts++;
+        if (attempts > maxAttempts) {
+            clearInterval(checkSeatStep);
+            console.warn("⚠️ 等待座位選擇逾時");
+            return;
+        }
+
+        // 找「電腦選號」按鈕/radio/label
+        const allClickable = [...document.querySelectorAll('button, label, a, input[type="radio"], div[role="button"]')];
+        const computerSelectEl = allClickable.find(el => {
+            const text = el.textContent || el.value || '';
+            return text.includes('電腦選號');
+        });
+
+        if (!computerSelectEl) return;
+
+        clearInterval(checkSeatStep);
+        console.log("✅ 找到電腦選號");
+        simulateClick(computerSelectEl);
+
+        // 勾選連號
+        setTimeout(() => {
+            const allLabelsAndInputs = [...document.querySelectorAll('label, input[type="checkbox"]')];
+            const consecutiveEl = allLabelsAndInputs.find(el => {
+                const text = el.textContent || el.value || '';
+                return text.includes('連號') || text.includes('連續');
+            });
+
+            if (consecutiveEl) {
+                const checkbox = consecutiveEl.tagName === 'LABEL'
+                    ? consecutiveEl.querySelector('input[type="checkbox"]') || consecutiveEl
+                    : consecutiveEl;
+                if (!checkbox.checked) {
+                    simulateClick(checkbox);
+                    console.log("✅ 勾選連號");
+                }
+            }
+
+            // 點擊確認/下一步
+            setTimeout(() => {
+                const confirmBtn = [...document.querySelectorAll('button')]
+                    .find(btn => {
+                        const text = btn.textContent || '';
+                        return (text.includes('確認') || text.includes('下一步') || text.includes('送出')) && !btn.disabled;
+                    });
+                if (confirmBtn) {
+                    simulateClick(confirmBtn);
+                    console.log("🎯 座位選擇確認完成");
+                }
+            }, 500);
+        }, 500);
+    }, 500);
+}
+
 // ✅ 主搶票程式
 function startTicketScript() {
     chrome.storage.local.get(["kktix_settings", "botEnabled"], (data) => {
@@ -57,12 +117,11 @@ function startTicketScript() {
             const matchPrice = priceKeywords.length === 0 || priceKeywords.some(keyword => cleanPrice.includes(keyword));
 
             if (matchName || matchPrice) {
-                console.log("✅ 找到票種", cleanName, cleanPrice);
-                found = true;
-
                 const plusButton = box.querySelector('.btn-default.plus');
 
                 if (plusButton) {
+                    console.log("✅ 找到票種", cleanName, cleanPrice);
+                    found = true;
                     // 強制啟用按鈕（Angular 可能禁用）
                     plusButton.removeAttribute("disabled");
 
@@ -91,6 +150,11 @@ function startTicketScript() {
                         if (nextBtn) {
                             simulateClick(nextBtn);
                             console.log("🎯 點擊下一步完成");
+
+                            // 處理電腦選號連號
+                            if (setting.consecutive) {
+                                handleSeatSelection(setting);
+                            }
                         } else {
                             console.warn("⚠️ 找不到下一步按鈕");
                         }
